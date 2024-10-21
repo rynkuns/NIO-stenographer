@@ -14,10 +14,11 @@ from sys import platform
 
 
 def main():
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="medium", help="Model to use",
                         choices=["tiny", "base", "small", "medium", "large"])
-    parser.add_argument("--non_english", action='store_true',
+    parser.add_argument("--english_only", action='store_true',
                         help="Don't use the english model.")
     parser.add_argument("--energy_threshold", default=1000,
                         help="Energy level for mic to detect.", type=int)
@@ -26,6 +27,9 @@ def main():
     parser.add_argument("--phrase_timeout", default=3,
                         help="How much empty space between recordings before we "
                              "consider it a new line in the transcription.", type=float)
+    parser.add_argument("--output_file",
+                        help="Nazwa pliku do którego będzie zapisana transkrypcja.", type=str)
+
     if 'linux' in platform:
         parser.add_argument("--default_microphone", default='pulse',
                             help="Default microphone name for SpeechRecognition. "
@@ -61,7 +65,7 @@ def main():
 
     # Load / Download model
     model = args.model
-    if args.model != "large" and not args.non_english:
+    if args.model != "large" and args.english_only:
         model = model + ".en"
     audio_model = whisper.load_model(model)
 
@@ -71,6 +75,7 @@ def main():
     transcription = ['']
 
     with source:
+        input("Naciśnij Enter, aby spróbkować szum (ambient):")
         recorder.adjust_for_ambient_noise(source)
 
     def record_callback(_, audio:sr.AudioData) -> None:
@@ -88,6 +93,14 @@ def main():
 
     # Cue the user that we're ready to go.
     print("Model loaded.\n")
+
+    filepath = None
+    if args.output_file:
+        timestamp = datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+        filepath = os.path.split(args.output_file)
+        filepath = os.path.join("Recordings", filepath[0]+timestamp+filepath[1])
+        with open(filepath, 'w') as file:
+            file.write(f"NIO-STENOGRAPHER | Transkrypcja z {timestamp}\n\n\n")
 
     while True:
         try:
@@ -119,6 +132,9 @@ def main():
                 # Otherwise edit the existing one.
                 if phrase_complete:
                     transcription.append(text)
+                    if filepath:
+                        with open(filepath, "a") as file:
+                            file.write(text)
                 else:
                     transcription[-1] = text
 
